@@ -1,0 +1,1080 @@
+#==========================================================================
+# Researcher: katherine H
+# Project Title: Applying Linear Mixed Models
+# Name: Henry Nanji
+# Date: Monday 06.09.21
+#=========================================================================
+# Environment set up and dependencies
+dir.create("data")
+dir.create("data_output")
+dir.create("fig_output")
+dir.create("report_output")
+
+# Loading Libraries
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(ggplot2)
+library(stringr)
+library(gplots)
+library(broom.mixed)
+library(lme4)
+library(multilevel)
+library(jtools)
+library(performance) # ised to extract ICC
+# data(sleepstudy)  the sleep data set is part of the lme4 package
+#install.packages("sjPlot")
+library(sjPlot)
+
+
+
+# Final flow Model
+flowmodel <- lmer(flowrate ~ treatment + (1|patno) + (1|visit),
+                           data = salivadata, REML = FALSE)
+
+summ(flowmodel)
+# Applying gamma model 
+
+flowmodel_g <- glmer(flowrate ~ treatment  + (1|patno) +  (1|visit), 
+             family = Gamma(link = "identity"),  # link function = identity
+             data = salivadata)
+
+summ(flowmodel_g)
+
+
+
+# Final Model which includes treatment only
+proteinmodel <- lmer(protenconc ~ treatment + (1|patno) +  (1|visit),
+                    data = salivadata, REML = FALSE)
+
+# extract parameters
+summ(proteinmodel, confint = TRUE)
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+pr01 <- lmer(protenconc ~ 1  + (1|patno), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+pr02 <- lmer(protenconc ~ treatment  + (1|patno), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+pr03 <- lmer(protenconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+ #we just estimate the mean of the data set
+data = salivadata, REML = FALSE)
+
+anova(pr01, pr02) # testing for treatment effect
+anova(pr02, pr03) # testing for withing subject effect
+
+
+# effect of visit not significant over time
+
+
+jpeg(file="./fig_output/proteninteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = flowrate, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "Proten conc",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+
+#  Make predictions and extract residual
+
+proten_residuals <-data.frame(residuals(proteinmodel))
+
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/proteinresidual.jpeg")   
+ggplot(data = proten_residuals,
+       aes(x = residuals.proteinmodel.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-protein") 
+dev.off()
+
+jpeg(file="./fig_output/QQplotprotein.jpeg")   
+qqnorm(proten_residuals$residuals.proteinmodel.) 
+qqline(proten_residuals$residuals.proteinmodel.) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(proten_residuals$residuals.proteinmodel.) 
+# data is very skewed
+
+boxplot(salivadata$protenconc)
+####
+#extract the values of the potential outliers based on the IQR
+ boxplot.stats(salivadata$protenconc)$out
+
+ #extract the row number corresponding to these outliers:
+  
+out <- boxplot.stats(salivadata$protenconc)$out
+out_ind <- which(salivadata$protenconc %in% c(out))
+out_ind
+salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 56 & rowno != 105 & rowno != 109 & rowno != 111
+         & rowno != 113 & rowno != 139 & rowno != 191 & rowno != 194
+         & rowno != 195 & rowno != 201) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier$protenconc)
+proteinM1 <- lmer(protenconc ~ treatment + (1|patno) +  (1|visit),
+                     data = data_without_outlier, REML = FALSE)
+
+# extract parameters
+summ(proteinM1, confint = TRUE)
+
+proten_residualsM1 <-data.frame(residuals(proteinM1))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/flowrateresidual.jpeg")   
+ggplot(data = proten_residualsM1,
+       aes(x = residuals.proteinM1.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-protein without outliets") 
+dev.off()
+
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(proten_residualsM1$residuals.proteinM1.) 
+qqline(proten_residualsM1$residuals.proteinM1.) 
+dev.off()
+
+shapiro.test(proten_residualsM1$residuals.proteinM1.)
+
+#
+# conclusoion. After deleting  outliers for protein concentration, model did not converge
+
+ 
+#=================================================================
+#  Exploring Total soduimconc
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$sodiumconc))
+
+# EXPLORING SIGNIFICANCE
+
+
+sodium.model <- lmer(sodiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                    # we just estimate the mean of the data set
+                    data = salivadata, REML = FALSE)
+
+
+summ(sodium.model, confint = TRUE)
+
+# adding gender in the model
+
+ ggplot(data = salivadata,
+       aes(x = gender, y = sodiumconc)) +
+  geom_boxplot() 
+
+# # Investigating age
+ 
+ sod0 <- lmer(sodiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                      # we just estimate the mean of the data set
+                      data = salivadata, REML = FALSE)
+ 
+ # add  agecat2
+ 
+ sod1 <- lmer(sodiumconc ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+                      # we just estimate the mean of the data set
+                      data = salivadata, REML = FALSE)
+ 
+ sod2 <- lmer(sodiumconc ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+                      # we just estimate the mean of the data set
+                      data = salivadata, REML = FALSE)
+
+# 
+# # testing if agecat2 is significant
+ anova(sod0, sod1)
+# # testing if agecat is significant
+anova(sod0, sod1)
+# 
+# # con conclusion, both agecat2 and agecat3 are not significant
+#
+# #==================================================================
+
+bmi0 <- lmer(sodiumconc ~ treatment   + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+bmi1 <- lmer(sodiumconc ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if bmicatis significant
+anova(bmi0, bmi1)
+
+# bmi is not significant
+# Final sodium model
+sodium.model <- lmer(sodiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = salivadata, REML = FALSE)
+#  due to high singularity, vistit is omitted= singularity mean there is 
+# a perfect correlation between  two of the 2 IV
+
+sodium.model <- lmer(sodiumconc ~ treatment  + (1|patno), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = salivadata, REML = FALSE)
+summ(sodium.model, confint = TRUE)
+
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+na01 <- lmer(sodiumconc ~ 1  + (1|patno), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+na02 <- lmer(sodiumconc ~ treatment  + (1|patno), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+# na03 <- lmer(sodiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             #data = salivadata, REML = FALSE)
+anova(mg01, mg02) # testing for treatment effect
+#anova(mg02, mg03) # testing for withing subject effect
+
+
+# effect of visit not significant over time
+
+jpeg(file="./fig_output/sodiuminteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = sodiumconc, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "Sodium conc",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+#  Make predictions and extract residual
+
+so_residuals <-data.frame(residuals(sodium.model))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/flowrateresidual.jpeg")   
+ggplot(data = so_residuals,
+       aes(x = residuals.sodium.model.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-sodium") 
+dev.off()
+
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(so_residuals$residuals.sodium.model.) 
+qqline(so_residuals$residuals.sodium.model.) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(so_residuals$residuals.sodium.model.) 
+# data is very skewed
+
+boxplot(salivadata$sodiumconc)
+####
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$sodiumconc)$out
+
+#extract the row number corresponding to these outliers:
+
+out1 <- boxplot.stats(salivadata$sodiumconc)$out
+out_ind <- which(salivadata$sodiumconc %in% c(out1))
+out_ind
+salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier1  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 26 & rowno != 122 & rowno != 128 & rowno != 130
+         & rowno != 132 & rowno != 150 & rowno != 176 & rowno != 178 & rowno != 180
+         & rowno != 182 & rowno != 184 & rowno != 189 & rowno != 200 & rowno != 202) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier1$sodiumconc)
+soM1 <- lmer(protenconc ~ treatment + (1|patno) +  (1|visit),
+                  data = data_without_outlier1, REML = FALSE)
+
+# extract parameters
+summ(soM1, confint = TRUE)
+
+so_residualsM1 <-data.frame(residuals(soM1))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/flowrateresidual.jpeg")   
+ggplot(data = so_residualsM1,
+       aes(x = residuals.soM1.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-sodium without outliets") 
+dev.off()
+
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(so_residualsM1$residuals.soM1.) 
+qqline(so_residualsM1$residuals.soM1.) 
+dev.off()
+
+shapiro.test(so_residualsM1$residuals.soM1.)
+
+sodium.model <- lmer(sodiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = data_without_outlier1, REML = FALSE)
+summ(sodium.model, confint = TRUE)
+
+
+
+#=================================================================
+#  Exploring Total magnesium concentration
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$magnesiumconc))
+
+# EXPLORING SIGNIFICANCE
+
+
+mg.model <- lmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = salivadata, REML = FALSE)
+
+
+summ(mg.model, confint = TRUE)
+
+
+
+# # Investigating age
+
+mg0 <- lmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# add  agecat2
+
+mg1 <- lmer(magnesiumconc ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+mg2 <- lmer(magnesiumconc ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if agecat2 is significant
+anova(mg0, mg1)
+# # testing if agecat is significant
+anova(mg0, mg2)
+# 
+# # con conclusion, both agecat2 and agecat3 are not significant
+#
+# #==================================================================
+
+bmi0 <- lmer(magnesiumconc ~ treatment   + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+bmi1 <- lmer(magnesiumconc ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if bmicatis significant
+anova(bmi0, bmi1)
+
+# bmi is boarderline significant
+# Final mg model
+mg <- lmer(magnesiumconc ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = salivadata, REML = FALSE)
+summ(mg, confint = TRUE)
+# remove bmi as it is not significant
+
+mg <- lmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+           # we just estimate the mean of the data set
+           data = salivadata, REML = FALSE)
+summ(mg, confint = TRUE)
+
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.4 <-aov(magnesiumconc ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.4)
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.5 <-aov(phosphorus ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.5)
+mg01 <- lmer(magnesiumconc ~ 1  + (1|patno) , # this is an intercept only model where
+              # we just estimate the mean of the data set
+              data = salivadata, REML = FALSE)
+
+mg02 <- lmer(magnesiumconc ~ treatment  + (1|patno), # this is an intercept only model where
+              # we just estimate the mean of the data set
+              data = salivadata, REML = FALSE)
+mg03 <- lmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+              # we just estimate the mean of the data set
+              data = salivadata, REML = FALSE)
+anova(mg01, mg02) # testing for treatment effect
+anova(mg02, mg03) # testing for withing subject effect
+
+# effect of visit not significant over time
+
+jpeg(file="./fig_output/magnesiuminteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = magnesiumconc, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "magnesium conc",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+#  Make predictions and extract residual
+plot(mg)
+mg_residuals <-data.frame(residuals(mg))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/mgresiduals.jpeg")   
+ggplot(data = mg_residuals,
+       aes(x = residuals.mg.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-mg") 
+dev.off()
+
+jpeg(file="./fig_output/mgQQplot.jpeg")   
+qqnorm(mg_residuals$residuals.mg) 
+qqline(mg_residuals$residuals.mg) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(mg_residuals$residuals.mg) 
+# data is very skewed
+
+boxplot(salivadata$magnesiumconc)
+####
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$magnesiumconc)$out
+
+#extract the row number corresponding to these outliers:
+
+out2 <- boxplot.stats(salivadata$magnesiumconc)$out
+out_ind <- which(salivadata$magnesiumconc %in% c(out2))
+out_ind
+salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier2  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 39 & rowno != 61 & rowno != 67 & rowno != 99
+         & rowno != 110 & rowno != 121 & rowno != 163 & rowno != 187 & rowno != 188
+         & rowno != 189 & rowno != 209) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier2$magnesiumconc)
+mgM1 <- lmer(magnesiumconc ~ treatment + (1|patno) +  (1|visit),
+             data = data_without_outlier2, REML = FALSE)
+
+# extract parameters
+summ(mgM1, confint = TRUE)
+
+mg_residualsM1 <-data.frame(residuals(mgM1))
+
+# residuals should be normally distributed with a mean of 
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(mg_residualsM1$residuals.mgM1.) 
+qqline(mg_residualsM1$residuals.mgM1.) 
+dev.off()
+
+shapiro.test(mg_residualsM1$residuals.mgM1.)
+
+magnesium.model <- lmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                     # we just estimate the mean of the data set
+                     data = data_without_outlier2, REML = FALSE)
+summ(magnesium.model, confint = TRUE)
+
+# After deleting outliers, residuals still not normally distributed
+
+
+#=================================================================
+#  Exploring Total  phosphorus
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$phosphorus))
+
+# EXPLORING SIGNIFICANCE
+
+
+ph.model <- lmer(phosphorus ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                 # we just estimate the mean of the data set
+                 data = salivadata, REML = FALSE)
+
+
+summ(ph.model, confint = TRUE)
+
+
+
+# # Investigating age
+
+age0 <- lmer(phosphorus ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+# add  agecat2
+
+age2 <- lmer(phosphorus ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+age3 <- lmer(phosphorus ~ treatment  + agecat3 + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+# 
+# # testing if agecat2 is significant
+anova(age0, age2)
+# # testing if agecat is significant
+anova(age0, age3)
+# 
+# # con conclusion, both agecat2 and agecat3 are not significant
+#
+# #==================================================================
+
+bmi0 <- lmer(phosphorus ~ treatment   + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+bmi1 <- lmer(phosphorus ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if bmicatis significant
+anova(bmi0, bmi1)
+
+# bmi is boarderline significant
+# Final mg model
+ph <- lmer(phosphorus ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+           # we just estimate the mean of the data set
+           data = salivadata, REML = FALSE)
+summ(ph, confint = TRUE)
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.5 <-aov(phosphorus ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.5)
+pho <- lmer(phosphorus ~ 1  + (1|patno) , # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+ph1 <- lmer(phosphorus ~ treatment  + (1|patno), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+ph2 <- lmer(phosphorus ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+anova(pho, ph1)  # testing for treatmemnt effect
+anova(ph1, ph2)  # testing  for visitb effect
+
+
+# effect of visit not significant over time
+
+jpeg(file="./fig_output/phosphurusinteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = phosphorus, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "phosphorus",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+#  Make predictions and extract residual
+
+ph_residuals <-data.frame(residuals(ph))
+
+# residuals should be normally distributed with a mean of 0
+
+jpeg(file="./fig_output/phresiduals.jpeg")   
+ggplot(data = ph_residuals,
+       aes(x = residuals.ph.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-ph") 
+dev.off()
+
+jpeg(file="./fig_output/QQphplot.jpeg")   
+qqnorm(ph_residuals$residuals.ph) 
+qqline(ph_residuals$residuals.ph) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(ph_residuals$residuals.ph) 
+# data is very skewed
+
+boxplot(salivadata$phosphorus)
+####
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$phosphorus)$out
+
+#extract the row number corresponding to these outliers:
+
+out2 <- boxplot.stats(salivadata$phosphorus)$out
+out_ind <- which(salivadata$phosphorus %in% c(out2))
+out_ind
+#salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier2  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 37 & rowno != 103 & rowno != 105 & rowno != 107
+         & rowno != 109 & rowno != 110 & rowno != 112 & rowno != 120 & rowno != 160
+         & rowno != 195) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier2$phosphorus)
+phM1 <- lmer(phosphorus ~ treatment + (1|patno) +  (1|visit),
+             data = data_without_outlier2, REML = FALSE)
+
+# extract parameters
+summ(phM1, confint = TRUE)
+
+ph_residualsM1 <-data.frame(residuals(phM1))
+
+# residuals should be normally distributed with a mean of 
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(ph_residualsM1$residuals.phM1.) 
+qqline(ph_residualsM1$residuals.phM1.) 
+dev.off()
+
+shapiro.test(ph_residualsM1$residuals.phM1.)
+
+ph.model <- lmer(phosphorus ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                        # we just estimate the mean of the data set
+                        data = data_without_outlier2, REML = FALSE)
+summ(ph.model, confint = TRUE)
+
+# After deleting outliers, residuals still not normally distributed
+
+
+#=================================================================
+#  Exploring Total  potassiom
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$potassiom))
+
+# EXPLORING SIGNIFICANCE
+
+
+k.model <- lmer(potassiom ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                 # we just estimate the mean of the data set
+                 data = salivadata, REML = FALSE)
+
+
+summ(k.model, confint = TRUE)
+
+
+
+# # Investigating age
+
+age0 <- lmer(potassiom ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# add  agecat2
+
+age2 <- lmer(potassiom ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+age3 <- lmer(potassiom ~ treatment  + agecat3 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if agecat2 is significant
+anova(age0, age2)
+# # testing if agecat is significant
+anova(age0, age3)
+# 
+# # con conclusion, both agecat2 and agecat3 are not significant
+#
+# #==================================================================
+
+bmi0 <- lmer(potassiom ~ treatment   + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+bmi1 <- lmer(potassiom ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if bmicatis significant
+anova(bmi0, bmi1)
+
+# bmi is boarderline significant
+# Final k model
+k <- lmer(potassiom ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+           # we just estimate the mean of the data set
+           data = salivadata, REML = FALSE)
+summ(k, confint = TRUE)
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.5 <-aov(phosphorus ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.5)
+k01 <- lmer(potassiom ~ 1  + (1|patno) , # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+k02 <- lmer(potassiom ~ treatment  + (1|patno), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+k03 <- lmer(potassiom ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+anova(k01, k02)  # testing for treatmemnt effect
+anova(k02, k03)  # testing  for visitb effect
+
+
+# effect of visit not significant over time
+
+jpeg(file="./fig_output/potassiuminteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = potassiom, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "potassium",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+
+#  Make predictions and extract residual
+
+k_residuals <-data.frame(residuals(k))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/kresiduals.jpeg")   
+ggplot(data = k_residuals,
+          aes(x = residuals.k.)) +
+    geom_density() +
+    labs(x = "residuals", y = "density",
+                   title = "Residual plot-K") 
+dev.off()
+
+
+jpeg(file="./fig_output/kQQplot.jpeg")   
+qqnorm(k_residuals$residuals.k) 
+qqline(k_residuals$residuals.k) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(k_residuals$residuals.k) 
+# data is very skewed
+
+boxplot(salivadata$potassiom)
+####
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$potassiom)$out
+
+#extract the row number corresponding to these outliers:
+
+out2 <- boxplot.stats(salivadata$potassiom)$out
+out_ind <- which(salivadata$potassiom %in% c(out2))
+out_ind
+#salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier2  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 40 & rowno != 71 & rowno != 97 & rowno != 103
+         & rowno != 105 & rowno != 109 & rowno != 110 & rowno != 111 & rowno != 112
+         & rowno != 113  & rowno != 114 & rowno != 160 & rowno != 188) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier2$potassiom)
+
+kM1 <- lmer(potassiom ~ treatment + (1|patno) +  (1|visit),
+             data = data_without_outlier2, REML = FALSE)
+
+# extract parameters
+summ(kM1, confint = TRUE)
+
+k_residualsM1 <-data.frame(residuals(kM1))
+
+# residuals should be normally distributed with a mean of 
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(k_residualsM1$residuals.kM1.) 
+qqline(k_residualsM1$residuals.kM1.) 
+dev.off()
+
+shapiro.test(k_residualsM1$residuals.kM1.)
+
+k.model <- lmer(potassiom ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                 # we just estimate the mean of the data set
+                 data = data_without_outlier2, REML = FALSE)
+summ(k.model, confint = TRUE)
+
+# After deleting outliers, residuals still not normally distributed
+
+
+
+#=================================================================
+#  Exploring Total calcium
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$calcium))
+
+# EXPLORING SIGNIFICANCE
+
+
+ca.model <- lmer(calcium ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                # we just estimate the mean of the data set
+                data = salivadata, REML = FALSE)
+
+
+summ(ca.model, confint = TRUE)
+
+
+
+# # Investigating age
+
+age0 <- lmer(calcium ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# add  agecat2
+
+age2 <- lmer(calcium ~ treatment  + agecat2 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+age3 <- lmer(calcium ~ treatment  + agecat3 + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if agecat2 is significant
+anova(age0, age2)
+# # testing if agecat is significant
+anova(age0, age3)
+# 
+# # con conclusion, both agecat2 and agecat3 are not significant
+#
+# #==================================================================
+
+bmi0 <- lmer(calcium ~ treatment   + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+bmi1 <- lmer(calcium ~ treatment  + bmicat + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+# 
+# # testing if bmicatis significant
+anova(bmi0, bmi1)
+
+
+# Final ca model
+ca <- lmer(calcium ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+          # we just estimate the mean of the data set
+          data = salivadata, REML = FALSE)
+summ(ca, confint = TRUE)
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.5 <-aov(phosphorus ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.5)
+ca01 <- lmer(calcium ~ 1  + (1|patno) , # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+ca02 <- lmer(calcium ~ treatment  + (1|patno), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+ca03 <- lmer(calcium ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+            # we just estimate the mean of the data set
+            data = salivadata, REML = FALSE)
+
+anova(ca01, ca02)  # testing for treatmemnt effect
+anova(ca02, ca03)  # testing  for visitb effect
+
+jpeg(file="./fig_output/calciuminteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = calcium, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "Calcium",
+       title = "Interaction plot") 
+dev.off()
+
+
+
+#  Make predictions and extract residual
+
+ca_residuals <-data.frame(residuals(ca))
+
+# residuals should be normally distributed with a mean of 0
+
+jpeg(file="./fig_output/Caresiduals.jpeg")   
+ggplot(data = ca_residuals,
+       aes(x = residuals.ca.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-Ca") 
+dev.off()
+
+jpeg(file="./fig_output/CaQQplot.jpeg")   
+qqnorm(ca_residuals$residuals.ca) 
+qqline(ca_residuals$residuals.ca) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(ca_residuals$residuals.ca) 
+# data is very skewed
+
+boxplot(salivadata$calcium)
+####
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$calcium)$out
+
+#extract the row number corresponding to these outliers:
+
+out2 <- boxplot.stats(salivadata$calcium)$out
+out_ind <- which(salivadata$calcium %in% c(out2))
+out_ind
+#salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+#row_no <-c(56, 105, 109, 111, 113, 139, 191, 194, 195, 201)
+data_without_outlier2  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 85 & rowno != 87 & rowno !=89 & rowno != 139
+         & rowno != 160 & rowno != 207) # deleting outliers
+
+# refit the model on  data set without outluiers for protemnconcen
+
+boxplot(data_without_outlier2$calcium)
+
+caM1 <- lmer(calcium ~ treatment + (1|patno) +  (1|visit),
+            data = data_without_outlier2, REML = FALSE)
+
+# extract parameters
+summ(caM1, confint = TRUE)
+
+ca_residualsM1 <-data.frame(residuals(caM1))
+
+# residuals should be normally distributed with a mean of 
+jpeg(file="./fig_output/QQplot.jpeg")   
+qqnorm(ca_residualsM1$residuals.caM1.) 
+qqline(ca_residualsM1$residuals.caM1.) 
+dev.off()
+
+shapiro.test(ca_residualsM1$residuals.caM1.)
+
+ca.model <- lmer(calcium ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                # we just estimate the mean of the data set
+                data = data_without_outlier2, REML = FALSE)
+summ(ca.model, confint = TRUE)
+
+# After deleting outliers, residuals still not normally distributed
+
+
+#=================================================================
+#  Exploring Total zinc
+#================================================================
+
+# check if sodiumconc has a missing value
+sum(is.na(salivadata$zinc))
+
+# EXPLORING SIGNIFICANCE
+
+
+zn.model <- lmer(zinc ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+                 # we just estimate the mean of the data set
+                 data = salivadata, REML = FALSE)
+
+
+summ(zn.model, confint = TRUE)
+
+
+# Zinc is clearly not statistically significant --> no further action
+
+by(data=salivadata, INDICES=salivadata$treatment, FUN=lmer,
+   formula=formula("zinc ~ treatment  + (1|patno) +  (1|visit)"))
+
+#=============================================
+# Mdel for sulphure
+
+#==============================================
+
+sul <- lmer(sulphur ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+           # we just estimate the mean of the data set
+           data = salivadata, REML = FALSE)
+summ(sul, confint = TRUE)
+
+
+# TESTING EFFECT OF VISIT AND TREATMENT FOR SS AND US
+
+#aov.5 <-aov(phosphorus ~ visit*treatment + Error(patno/(visit)), salivadata) 
+#summary(aov.5)
+sul01 <- lmer(sulphur ~ 1  + (1|patno) , # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+sul02 <- lmer(sulphur ~ treatment  + (1|patno), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+sul03 <- lmer(sulphur ~ treatment  + (1|patno) +  (1|visit), # this is an intercept only model where
+             # we just estimate the mean of the data set
+             data = salivadata, REML = FALSE)
+
+anova(sul01, sul02)  # testing for treatmemnt effect
+anova(sul02, sul03)  # testing  for visitb effect
+
+jpeg(file="./fig_output/sulinteraction.jpeg")
+ggplot(data = salivadata,
+       aes(x = as.factor(treatment), y = sulphur, color = visit)) +
+  geom_boxplot() +
+  labs(x = "treatment", y = "Sulphur",
+       title = "Interaction plot") 
+dev.off()
+
+#  Make predictions and extract residual
+sul_residuals <-data.frame(residuals(sul))
+
+# residuals should be normally distributed with a mean of 0
+jpeg(file="./fig_output/sulresiduals.jpeg")   
+ggplot(data = sul_residuals,
+       aes(x = residuals.sul.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-S") 
+dev.off()
+
+jpeg(file="./fig_output/sulQQplot.jpeg")   
+qqnorm(sul_residuals$residuals.sul) 
+qqline(sul_residuals$residuals.sul) 
+dev.off()
+
+# Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+shapiro.test(sul_residuals$residuals.sul) 

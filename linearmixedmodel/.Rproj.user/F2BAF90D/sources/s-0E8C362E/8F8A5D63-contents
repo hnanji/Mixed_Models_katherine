@@ -1,0 +1,320 @@
+#==========================================================================
+# Project Title: To use statistical learning methods to investigate factor related to heart disease
+# Name: Henry Nanji
+# Date: 
+#=========================================================================
+# Environment set up and dependencies
+dir.create("data")
+dir.create("data_output")
+dir.create("fig_output")
+dir.create("report_output")
+
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
+              "data/df.csv", mode = "wb")
+install.packages("readr")
+install.packages('dplyr')
+install.packages('tidyverse')
+install.packages("caret")
+install.packages("gtsummary")
+install.packages("ggplot2")
+install.packages("caret",
+                 repos = "http://cran.r-project.org", 
+                 dependencies = c("Depends", "Imports", "Suggests"))
+# Loading Libraries
+library(dplyr)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(ggplot2)
+#==========================================================================
+# Load data set
+heart_data <-read_csv("./data/df.csv", col_names = FALSE) %>%
+  rename(age = X1,
+         sex = X2,
+         chestpain = X3,
+         restingbp = X4,
+         cholesterol = X5,
+         fastingbp = X6,
+         restingecg = X7,
+         maxheartrate = X8,
+         inducedangina = X9,
+         exinduceddepress = X10,
+         peakexerciseslope = X11,
+         vesselsno = X12,
+         thal = X13,
+         disease = X14) %>%
+  mutate(heartdisease = case_when(# according to database, 1,2,3,4 are classified as having heart disease and 0= no heart disease
+    disease == 1 | disease == 2  | disease == 3 | disease == 4  ~ 1, 
+    disease == 0  ~ 0,  
+    TRUE ~ 2))
+#Preprocessing-----------------------------------------------------------------
+# missing observation check
+sum(is.na(heart_data))
+
+sapply(heart_data ,class)
+# The data imported had data types which didn't match the online documentation and dictionary
+# Hence, using the online dictionary, the following conversions were made ensuring that the variables types  
+# were suitable for machine learning algorithm
+heart_data$heartdisease <-as.factor(heart_data$heartdisease)
+heart_data$age <-as.integer(heart_data$age)
+heart_data$sex <-as.factor(heart_data$sex)
+heart_data$chestpain <-as.factor(heart_data$chestpain)
+heart_data$restingbp <-as.integer(heart_data$restingbp)
+heart_data$cholesterol <-as.integer(heart_data$cholesterol)
+heart_data$fastingbp <-as.factor(heart_data$fastingbp)
+heart_data$restingecg <-as.factor(heart_data$restingecg)
+heart_data$maxheartrate <-as.integer(heart_data$maxheartrate)
+heart_data$inducedangina <-as.factor(heart_data$inducedangina)
+heart_data$peakexerciseslope <-as.factor(heart_data$peakexerciseslope)
+# The variables thal and vessel had an incorrect observations as ?. 
+# With no means to check the data value from source, this was assumed to be missing and changed to zero
+heart_data$vesselsno[heart_data$vesselsno == "?"] = 0.0 
+heart_data$vesselsno <-as.numeric(heart_data$vesselsno)
+heart_data$thal[heart_data$thal == "?"] = 0.0 
+heart_data$thal <-as.factor(heart_data$thal)
+heart_data$heartdisease <-as.factor(heart_data$heartdisease)
+heart_data$exinduceddepress <-as.numeric(heart_data$exinduceddepress)
+heart_data <-heart_data %>%
+  select(-c(disease)) # dropping the original disease status variable
+#------------------------------------------------------------------------------
+# saving data in ouput file  for later use
+save(heart_data, file = "./data_output/heart_data_ana_set.Rdata") 
+#------------------------------------------------------------------------------ 
+#Adding labels to variables using online documentaytion
+heart_data$heartdisease <- factor(heart_data$heartdisease,
+                                  levels = c(0,1),
+                                  labels=c("No HD","HD")) # heart disease = HD, no heart disease = No HD
+heart_data$sex <- factor(heart_data$sex,
+                         levels = c(0,1),labels=c("Female","Male")) #  sex, 1=male, 0=female
+heart_data$chestpain <- factor(heart_data$chestpain,
+                               levels = c(1,2,3,4),
+                               labels=c("Typical Angina","Atypical Angina", "No Pain", "Asymtomatic")) 
+heart_data$fastingbp <- factor(heart_data$fastingbp,
+                               levels = c(0,1),
+                               labels=c("False","True")) #fasting blood pressure, 1=True, o=False
+heart_data$restingecg <- factor(heart_data$restingecg,
+                                levels = c(0,1,2),
+                                labels=c("Normal"," Abnormality", "Probable")) # resting ecg, 0=normal,1=abnormal,2=probably
+heart_data$inducedangina <- factor(heart_data$inducedangina,
+                                   levels = c(0,1),
+                                   labels=c("Not Induced"," Induced")) #induced angina, 1= not induced, 1=induced
+heart_data$peakexerciseslope <- factor(heart_data$peakexerciseslope,
+                                       levels = c(1,2,3),
+                                       labels=c("Upsloping"," Flat", "Downsloping")) #peak exercise, 1: upsloping, 2: flat, 3: downsloping
+#------------------------------------------------------------------------------
+ save(heart_data, file = "./data_output/heart_data_ana_set.Rdata") # saving data in ouput file  for later use
+#------------------------------------------------------------------------------
+# Exploring variables that are significant predictors and reducing noise in the data set
+y = heart_data$heartdisease # assigning the outcome variable
+
+# One hot encoding 
+dummymodel <- dummyVars(~ ., data = heart_data[, names(heart_data) != "heartdisease"])
+heart_data_dummified <- predict(dummymodel, newdata = heart_data)
+heart_data <-data.frame(heart_data_dummified)
+
+# scale all numeric variables between 0 and 1
+scale_model <- preProcess(heart_data, method='range')
+heart_data <- predict(scale_model, newdata = heart_data)
+
+# Append the outcome variable variable
+heart_data$heartdisease <- y
+
+# Estimating variable of importance
+jpeg(file="./fig_output/featuresplot.jpeg")
+featurePlot(x = subset(heart_data,select = -c(heartdisease)), 
+            y = heart_data$heartdisease, 
+            plot = "box",
+            strip=strip.custom(par.strip.text=list(cex=.7)),
+            scales = list(x = list(relation="free"), 
+                          y = list(relation="free")))
+dev.off()
+# From  visual inspection,the following variables doesn't appear to be good predictors of heart disease and will be dropped 
+# resting blood pressure(restingbp), sex, cholesterol and chestpain
+# The difference in mean between HN and no HD for some other levels of the categorical variables were similar
+# but a decesion was  made to retain them for further investigation
+
+#  ttest over all encoded variables, further investigating significant variables
+lapply(names(heart_data)[-27],function(x)
+  t.test(as.formula(paste(x,"heartdisease",sep="~")),
+         data=heart_data))
+#------------------------------------------------------------------------------
+# Variable selection-----------------------------------------------------------
+load("./data_output/heart_data_ana_set.Rdata")
+names(heart_data)
+
+heart_data <-heart_data %>%
+  select(-c(fastingbp,sex,cholesterol,chestpain)) # dropping redundant variables
+
+# Data Description: Continuous variables by disease status----------------------
+numvarsummary <- heart_data %>% dplyr::group_by(heartdisease) %>%
+  dplyr::summarize(count = n(),
+                   Age_mean= mean(age, na.rm = TRUE),
+                   Age_sd = sd(age, na.rm = TRUE),
+                   Restingpb_mean = mean(restingbp, na.rm = TRUE),
+                   Restingpb_sd = mean(restingbp, na.rm = TRUE),
+                   MaxHeartRate_mean = mean(maxheartrate, na.rm = TRUE),
+                   MaxHeartRate_sd = mean(maxheartrate, na.rm = TRUE))
+
+write.csv(numvarsummary,"./data_output/numvarsummary.csv")
+
+# Data Description: categorical variables by disease status 
+catvarsumthal <- heart_data %>%
+  dplyr::group_by(thal,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsumthal ,"./data_output/catvarsumthal.csv")
+
+catvarsumpeakexerciseslope <- heart_data %>%
+  dplyr::group_by(peakexerciseslope,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsumpeakexerciseslope ,"./data_output/catvarsumpeakexerciseslope.csv")
+
+catvarsumvesselsno <- heart_data %>%
+  dplyr::group_by(vesselsno,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsumvesselsno ,"./data_output/catvarsumvesselsno.csv")
+
+catvarsumexinduceddepress <- heart_data %>%
+  dplyr::group_by(exinduceddepress,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsumexinduceddepress ,"./data_output/catvarsumexinduceddepress.csv")
+
+catvarsumrestingecg <- heart_data %>%
+  dplyr::group_by(restingecg,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsumrestingecg ,"./data_output/catvarsumrestingecg.csv")
+
+catvarsuminducedangina <- heart_data %>%
+  dplyr::group_by(inducedangina,heartdisease) %>%
+  dplyr::summarize(count = n()) %>% 
+  dplyr::mutate(percentage = round(100*count / sum(count),2))
+write.csv(catvarsuminducedangina ,"./data_output/catvarsuminducedangina.csv")
+
+# Data Visualisation------------------------------------------------------------
+jpeg(file="./fig_output/agebydisease.jpeg")
+ggplot(heart_data, aes(x=heartdisease,y=age)) +
+  geom_boxplot(alpha = 0) +
+  labs(x = "Heart disease", y = "Age",
+       title = "Age distributiion by disease status")
+dev.off()
+
+jpeg(file="./fig_output/vesselsnobydisease.jpeg")
+ggplot(heart_data, aes(x=heartdisease,y=vesselsno)) +
+  geom_boxplot(alpha = 0) +
+  labs(x = "Heart disease", y = "vesselsno",
+       title = "Number of vessess by disease status")
+dev.off()
+
+jpeg(file="./fig_output/maxheartratebydisease.jpeg")
+ggplot(heart_data, aes(x=heartdisease,y=maxheartrate)) +
+  geom_boxplot(alpha = 0) +
+  labs(x = "Heart disease", y = "Max heart rate",
+       title = " Maximum heart rate by disease status")
+dev.off()
+
+jpeg(file="./fig_output/exinduceddepressbydisease.jpeg")
+ggplot(heart_data, aes(x=heartdisease,y=exinduceddepress)) +
+  geom_boxplot(alpha = 0) +
+  labs(x = "Heart disease", y = "exinduceddepress",
+       title = "Induced deopression by disease status")
+dev.off()
+
+jpeg(file="./fig_output/exinduceddepressbydisease.jpeg")
+ggplot(heart_data, aes(x=heartdisease,y=exinduceddepress)) +
+  geom_boxplot(alpha = 0) +
+  labs(x = "Heart disease", y = "exinduceddepress",
+       title = "Induced deopression by disease status")
+dev.off()
+
+
+jpeg(file="./fig_output/agedensity.jpeg")
+ggplot(data = heart_data) +
+  geom_density(aes(x = age, color = heartdisease)) 
+  labs(x = "age", y = "count",
+       title = "Density plot of age by disease status")
+dev.off()
+
+jpeg(file="./fig_output/maxheartratedensity.jpeg")
+ggplot(data = heart_data) +
+  geom_density(aes(x = maxheartrate, color = heartdisease)) 
+labs(x = "Max heart |rate", y = "count",
+     title = "Density plot of heart rate  by disease status")
+dev.off()
+
+jpeg(file="./fig_output/diseasestatus.jpeg")
+ggplot(data = heart_data, mapping= aes(x=heartdisease)) +
+  geom_bar(color = "purple") +
+  labs(x = "Disease status", y = "count",
+       title = "Disease status") 
+dev.off()
+
+
+# Model  Fitting----------------------------------------------------------------
+# Univariate model selection' EInvestigaing eacn variable in turns its is a significant predictior at the 0.05% level
+table(heart_data$heartdisease,heart_data$thal)
+fit1 <-glm(heartdisease ~ thal, data=heart_data, family=binomial) # for variable thal
+tbl_regression(fit1, exponentiate = TRUE) # not significant
+
+table(heart_data$heartdisease,heart_data$peakexerciseslope)
+fit2 <-glm(heartdisease ~ peakexerciseslope, data=heart_data, family=binomial) # for variable peakexerciseslope
+tbl_regression(fit2, exponentiate = TRUE) # very significant predictor
+
+fit3 <-glm(heartdisease ~ restingbp, data=heart_data, family=binomial) # for variable restingbp
+tbl_regression(fit3, exponentiate = TRUE) # very significant predictor
+
+table(heart_data$heartdisease,heart_data$restingecg)
+fit4 <-glm(heartdisease ~ restingecg, data=heart_data, family=binomial) # for variable restingecg
+tbl_regression(fit4, exponentiate = TRUE) # significant only at the probable level, consider collapsing levels
+
+table(heart_data$heartdisease,heart_data$inducedangina)
+fit5 <-glm(heartdisease ~ inducedangina, data=heart_data, family=binomial) # for variable inducedangina
+tbl_regression(fit5, exponentiate = TRUE) # highly significant
+
+fit7 <-glm(heartdisease ~ exinduceddepress, data=heart_data, family=binomial) # for variable exinduceddepress
+tbl_regression(fit7, exponentiate = TRUE) # highly significant
+
+fit8 <-glm(heartdisease ~ age, data=heart_data, family=binomial) # for variable age
+tbl_regression(fit8, exponentiate = TRUE) # highly significant
+
+fit9 <-glm(heartdisease ~ vesselsno, data=heart_data, family=binomial) # for variable vesselno
+tbl_regression(fit9, exponentiate = TRUE) # highly significant
+
+fit10 <-glm(heartdisease ~ maxheartrate, data=heart_data, family=binomial) # for variable maxheartrate
+tbl_regression(fit10, exponentiate = TRUE) # highly significant
+
+
+# Multivariate model selection---------------------------------------------------------
+#All variables that were significant at the univariate level
+# was moved into a multivariate model. significance level was maintained at 0.05. 
+# Variables with the highest signifance level was dropped first
+fitmulti <-glm(heartdisease ~ age+restingbp+restingecg+maxheartrate+inducedangina+exinduceddepress +
+               peakexerciseslope+vesselsno +thal, data=heart_data, family=binomial) 
+tbl_regression(fitmulti, exponentiate = TRUE) 
+#removing age
+fitmulti1 <-glm(heartdisease ~ restingbp+restingecg+maxheartrate+inducedangina+exinduceddepress +
+                 peakexerciseslope+vesselsno +thal, data=heart_data, family=binomial) 
+tbl_regression(fitmulti1, exponentiate = TRUE) 
+# removing thal var
+fitmulti2 <-glm(heartdisease ~ restingbp+restingecg+maxheartrate+inducedangina+exinduceddepress +
+                  peakexerciseslope+vesselsno, data=heart_data, family=binomial) 
+tbl_regression(fitmulti2, exponentiate = TRUE) 
+
+# removing  restingecg
+fitmulti3 <-glm(heartdisease ~ restingbp+maxheartrate+inducedangina+exinduceddepress +
+                  peakexerciseslope+vesselsno, data=heart_data, family=binomial) 
+tbl_regression(fitmulti3, exponentiate = TRUE) 
+
+# removing  restingbp
+fitmulti4 <-glm(heartdisease ~ maxheartrate+inducedangina+exinduceddepress +
+                  peakexerciseslope+vesselsno, data=heart_data, family=binomial) 
+tbl_regression(fitmulti4, exponentiate = TRUE) 
+
+# adding age as it might be related for clinical reasons
+fit_final <-glm(heartdisease ~ age + maxheartrate+inducedangina+exinduceddepress +
+                  peakexerciseslope+vesselsno, data=heart_data, family=binomial) 
+tbl_regression(fit_final, exponentiate = TRUE) 

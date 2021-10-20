@@ -1,0 +1,24 @@
+{
+    "id": "F4D1F411",
+    "path": "~/Katherine_Mixed Model/linearmixedmodel/gammaLME.R",
+    "project_path": "gammaLME.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1632470596556.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "cursorPosition": "27,32",
+        "scrollLine": "20"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1632477666,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1632477666533,
+    "read_only": false,
+    "read_only_alternatives": []
+}

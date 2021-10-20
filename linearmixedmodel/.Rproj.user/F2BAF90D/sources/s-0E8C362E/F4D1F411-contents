@@ -1,0 +1,93 @@
+
+
+GLMMs allow researchers to use
+the dependent variable most appropriate to their research
+question, while simultaneously meeting the mathematical
+criterion of normalized, homoscedastic residuals in linear
+regression. 
+GLMMs combine and extend the properties of LMM and
+generalized linear model (GLM) approaches, by relaxing LMM’s
+assumption that the dependent variable (and the residuals) follow
+a normal (Gaussian) distribution, and extending GLM’s scope of
+inference to extend beyond a single random population. Rather
+than making the default assumptions of LMM methods, GLMM
+requires researchers to specify a number of components of their
+data and design:
+   (1) the explanatory variables responsible for systematic variation
+in responses: referred to as the fixed factors;
+
+(2) the sampling structure of the design contributing to random
+variability in responses: the random factors;
+(3) the probability distribution describing the plausible
+processes underlying the observed data: the distribution of
+the dependent variable; and
+(4) the mathematical function characterizing the relationship
+between the fixed factors and the dependent variable: the link
+function.
+
+Using GLMM to Avoid the Need for
+Transformation of Skewed RT Data
+
+
+agam <− glm ( yobs ∼ I ( 1 / x seq ) , f amil y = Gamma( l i n k = ” i d e n t i t y ”) , c o n t r o l =
+                 glm. c o n t r ol ( maxit =100) , s t a r t=c ( 1 , 6 5 ) )
+l i b r a r y (MASS)
+myshape <− gamma.shape ( agam )
+gampred <− p r e d i c t ( agam , type=” r e s p o n s e ” , s e=T, d i s p e r s i o n=1/myshape$ alph a )
+
+
+
+
+
+# Try fitting a gamma generalized linear model via the glmer() function from the lme4 package:
+
+plot(resid(mg1, type = "pearson") ~ fitted(mg1))
+qqnorm(resid(mg1, type = "pearson"))
+qqline(resid(mg1, type = "pearson"))
+       
+       
+ mg1 <- glmer(magnesiumconc ~ treatment  + (1|patno) +  (1|visit), 
+              family = Gamma(link = "inverse"),
+                  data = salivadata)
+ 
+plot(mg1)
+ 
+
+
+mg_residuals <- data.frame(residuals(mg1))
+ 
+ # residuals should be normally distributed with a mean of 0
+ jpeg(file="./fig_output/flowrateresidual.jpeg")   
+ ggplot(data = mg_residuals,
+        aes(x = residuals.mg1.)) +
+   geom_density() +
+   labs(x = "residuals", y = "density",
+        title = "Residual plot-mg") 
+ dev.off()
+ 
+ jpeg(file="./fig_output/QQplot.jpeg")   
+ qqnorm(mg_residuals$residuals.mg1) 
+ qqline(mg_residuals$residuals.mg1) 
+ dev.off()
+ 
+ # Shapiro-Wilk test of approximately normally. if P >0.05, normality can be assumed
+ shapiro.test(mg_residuals$residuals.mg1) 
+ # data is very skewed
+ 
+ 
+ 
+ exer <- read.csv("https://stats.idre.ucla.edu/stat/data/exer.csv")
+ ## Convert variables to factor
+ exer <- within(exer, {
+   diet <- factor(diet)
+   exertype <- factor(exertype)
+   time <- factor(time)
+   id <- factor(id)
+ })
+
+
+ 
+ with(salivadata, interaction.plot(visit, treatment, flowrate,
+                             ylab = "mean of pulse", xlab = "time", trace.label = "group"))
+ 
+

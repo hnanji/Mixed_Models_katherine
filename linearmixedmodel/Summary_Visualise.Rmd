@@ -1,0 +1,469 @@
+---
+title: 'Katherine: Summary Statistisc'
+author: "Henry Nanji"
+date: "16/09/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(latexpdf)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(stringr)
+library(gplots)
+library(broom.mixed)
+library(mice)
+library(lme4)
+library(jtools)
+library(performance)
+library(sjPlot)
+
+
+# Importing data
+salivadata <-read_csv("./data/mmdata.csv")
+
+
+# Data preparation
+str(salivadata)
+# converting the relevant variables as a factor for easy analysis
+salivadata$visit  <-factor(salivadata$visit, levels = c(1,2,3,4), labels = c("V1", "V2", "V3", "V4"))
+salivadata$agecat  <-factor(salivadata$agecat, levels = c(1,2), labels = c("11-30", "31-55"))
+salivadata$bmicat  <-factor(salivadata$bmicat, levels = c(1,2), labels = c("<=25", ">25"))
+salivadata$treatment <-ifelse(salivadata$treatment == "US",0,1)
+salivadata$treatment  <-factor(salivadata$treatment, levels = c(0,1), labels = c("US", "SS"))
+
+# Create ID by group
+salivadata <- transform(salivadata,                                 
+                        ID = as.numeric(factor(treatment)))
+
+# checking and dealing with missing values
+# missing values investigation
+summary(salivadata)
+# there was one row with missing enteries for all variables that was deleted
+salivadata <-salivadata %>%
+  filter(patno != "") %>%
+  arrange(patno) # arranging dataset according to subject number
+
+```
+PART I
+
+Introduction: 
+
+The aim of this project was to  do the follwing
+ 1: summarise and visualise the data
+ 2: Fit a linear mixed effect model to the data comparing simulated and unsimulated and adjust for age, bmi, gender and ethnicicty
+ 3: perform correlation  analysis on the other salivary parateters that were measured
+ 
+# Data Pre-processing
+
+The dataset  was  imported and prepared for analysis.  there were missing values which weere not replaced as the numbers were small. Imputation is a possible consideration, that letwise deletion was allowed
+
+# Summary statistics: 
+
+
+```{r, echo =FALSE}
+summary_by_treatment1<-
+  salivadata %>%
+  group_by(treatment) %>%
+  summarize(meanFR = round(mean(flowrate),2),
+            sdFR = round(sd(flowrate, na.rm = TRUE),3),
+            meanAge = round(mean(age),2),
+            sdAge = round(sd(age, na.rm = TRUE),3),
+            meanBMI = round(mean((bmi), na.rm = TRUE),2),
+            sdBMI = round(sd(bmi, na.rm = TRUE),3),
+            meanPro = round(mean((protenconc), na.rm = TRUE),2),
+            sdPro = round(sd(protenconc, na.rm = TRUE),3),
+            meanNa = round(mean((sodiumconc), na.rm = TRUE),2),
+            sdNa = round(sd(sodiumconc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (summary_by_treatment1), caption = " Mean of Salivary parameters for SS and US")
+```  
+
+
+
+```{r, echo =FALSE}
+summary_by_treatment<-
+  salivadata %>%
+  group_by(treatment) %>%
+  summarize(
+            meanMg = round(mean((magnesiumconc), na.rm = TRUE),2),
+            sdMg = round(sd(magnesiumconc, na.rm = TRUE),3),
+            meanP = round(mean((phosphorus), na.rm = TRUE),2),
+            sdP = round(sd(phosphorus, na.rm = TRUE),3),
+            meanS = round(mean((sulphur), na.rm = TRUE),2),
+            sdS = round(sd(sulphur, na.rm = TRUE),3), 
+            meanK = round(mean((potassiom), na.rm = TRUE),2),
+            sdK = round(sd(potassiom, na.rm = TRUE),3),
+            meanCa = round(mean((calcium), na.rm = TRUE),2),
+            sdCa = round(sd(calcium, na.rm = TRUE),3),
+            meanZn = round(mean((zinc), na.rm = TRUE),2),
+            sdZn = round(sd(zinc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (summary_by_treatment), caption = " Mean of Salivary parameters for SS and US con't")
+```  
+
+
+
+```{r, echo =FALSE}
+summary_by_treatmenta <-
+  salivadata %>%
+  group_by(treatment, visit) %>%
+  summarize(meanFR = round(mean(flowrate),2),
+            sdFR = round(sd(flowrate, na.rm = TRUE),3),
+            meanAge = round(mean(age),2),
+            sdAge = round(sd(age, na.rm = TRUE),3),
+            meanBMI = round(mean((bmi), na.rm = TRUE),2),
+            sdBMI = round(sd(bmi, na.rm = TRUE),3),
+            meanPro = round(mean((protenconc), na.rm = TRUE),2),
+            sdPro = round(sd(protenconc, na.rm = TRUE),3),
+            meanNa = round(mean((sodiumconc), na.rm = TRUE),2),
+            sdNa = round(sd(sodiumconc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (summary_by_treatmenta), caption = "Mean of Salivary parameters for SS and US, by visit")
+```  
+
+
+
+```{r, echo =FALSE}
+summary_by_treatmentb<-
+  salivadata %>%
+  group_by(treatment, visit) %>%
+  summarize(
+            meanMg = round(mean((magnesiumconc), na.rm = TRUE),2),
+            sdMg = round(sd(magnesiumconc, na.rm = TRUE),3),
+            meanP = round(mean((phosphorus), na.rm = TRUE),2),
+            sdP = round(sd(phosphorus, na.rm = TRUE),3),
+            meanS = round(mean((sulphur), na.rm = TRUE),2),
+            sdS = round(sd(sulphur, na.rm = TRUE),3), 
+            meanK = round(mean((potassiom), na.rm = TRUE),2),
+            sdK = round(sd(potassiom, na.rm = TRUE),3),
+            meanCa = round(mean((calcium), na.rm = TRUE),2),
+            sdCa = round(sd(calcium, na.rm = TRUE),3),
+            meanZn = round(mean((zinc), na.rm = TRUE),2),
+            sdZn = round(sd(zinc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (summary_by_treatmentb), caption = " Mean of Salivary parameters for SS and US , by visit con't")
+``` 
+
+
+
+
+```{r, echo =FALSE}
+mean_by_patno1 <-
+  salivadata %>%
+  group_by(patno) %>%
+  summarize(meanFR = round(mean(flowrate),2),
+            sdFR = round(sd(flowrate, na.rm = TRUE),3),
+            meanAge = round(mean(age),2),
+            sdAge = round(sd(age, na.rm = TRUE),3),
+            meanBMI = round(mean((bmi), na.rm = TRUE),2),
+            sdBMI = round(sd(bmi, na.rm = TRUE),3),
+            meanPro = round(mean((protenconc), na.rm = TRUE),2),
+            sdPro = round(sd(protenconc, na.rm = TRUE),3),
+            meanNa = round(mean((sodiumconc), na.rm = TRUE),2),
+            sdNa = round(sd(sodiumconc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (mean_by_patno1), caption = "Mean of Salivary parameters by subjects")
+```  
+
+
+
+```{r, echo =FALSE}
+mean_by_patno2<-
+  salivadata %>%
+  group_by(patno) %>%
+  summarize(
+            meanMg = round(mean((magnesiumconc), na.rm = TRUE),2),
+            sdMg = round(sd(magnesiumconc, na.rm = TRUE),3),
+            meanP = round(mean((phosphorus), na.rm = TRUE),2),
+            sdP = round(sd(phosphorus, na.rm = TRUE),3),
+            meanS = round(mean((sulphur), na.rm = TRUE),2),
+            sdS = round(sd(sulphur, na.rm = TRUE),3), 
+            meanK = round(mean((potassiom), na.rm = TRUE),2),
+            sdK = round(sd(potassiom, na.rm = TRUE),3),
+            meanCa = round(mean((calcium), na.rm = TRUE),2),
+            sdCa = round(sd(calcium, na.rm = TRUE),3),
+            meanZn = round(mean((zinc), na.rm = TRUE),2),
+            sdZn = round(sd(zinc, na.rm = TRUE),3),
+            pop  = n_distinct(patno), .groups = "keep")
+    knitr::kable(
+    (mean_by_patno2), caption = " Mean of Salivary parameters by subjects con't")
+``` 
+
+
+
+```{r, echo =FALSE}
+visit_count<-
+  salivadata %>%
+  group_by(visit) %>%
+  summarize(count = n())
+    knitr::kable(
+    (visit_count), caption = "Repeated measurements by visit")
+``` 
+
+
+
+```{r, echo =FALSE}
+
+ss_gender <- salivadata %>%
+  filter(treatment =="SS") %>%
+  mutate(tag = as.numeric(duplicated(patno)))%>%
+  filter(tag == 0)%>%
+  group_by(treatment, gender) %>%
+  summarize(N = n()) %>%
+  mutate(freq = N / sum(N),
+         pct = round((freq*100),0))
+
+# This code calculate the stats for  gender by treatment group
+us_gender <- salivadata %>%
+  filter(treatment =="US") %>%
+  mutate(tag = as.numeric(duplicated(patno)))%>%
+  filter(tag == 0)%>%
+  group_by(treatment, gender) %>%
+  summarize(N = n()) %>%
+  mutate(freq = N / sum(N),
+         pct = round((freq*100),0))
+
+# combing the gender data set
+gender<- rbind(ss_gender, us_gender)
+ us_gender <- gender
+     knitr::kable(
+    (us_gender), caption = "Gender statistis")
+``` 
+
+
+ 
+```{r, echo =FALSE}
+# This code calculate the stats for  ethnicity by treatment group
+ss_ethnicity <- salivadata %>%
+  filter(treatment =="SS") %>%
+  mutate(tag = as.numeric(duplicated(patno)))%>%
+  filter(tag == 0)%>%
+  group_by(treatment, ethnicity) %>%
+  summarize(N = n()) %>%
+  mutate(freq = N / sum(N),
+         pct = round((freq*100),0))
+  
+
+# This code calculate the stats for  ethnicity by treatment group
+us_ethnicity <- salivadata %>%
+  filter(treatment =="US") %>%
+  mutate(tag = as.numeric(duplicated(patno)))%>%
+  filter(tag == 0)%>%
+  group_by(treatment, ethnicity) %>%
+  summarize(N = n()) %>%
+  mutate(freq = N / sum(N),
+         pct = round((freq*100),0))
+
+# combing the ethnicity data set
+ethnicity<- rbind(ss_ethnicity, us_ethnicity)
+us_ethnicity <-ethnicity
+     knitr::kable(
+    (us_ethnicity), caption = "Ethnicity statistis")
+``` 
+ 
+ 
+```{r, echo =FALSE}
+ missing_data <-data.frame(md.pattern((salivadata)))
+
+     knitr::kable(
+    (missing_data), caption = "Variables with missing data")
+``` 
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3}
+ggplot(data = salivadata, aes(x = treatment, y = flowrate, group = patno)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "treatment", y = "flowrate",
+       title = "Group differences") +
+  theme_minimal() 
+
+``` 
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3}
+plotmeans(flowrate ~ patno, main= "Mean hererogeneity across subjects", data = salivadata)
+```
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3}
+plotmeans(flowrate ~ visit, main= "Mean hererogeneity across visits", data = salivadata)
+```
+
+PART II: MIXED MODEL
+
+The dataset has repeated measurements made on each subject,each subject had multiple SS and US measurements of the outcome which are likely to be correlated , ie for flowrate (outcome of interest) are likely to be similar if they come from the same subject. The ICC(Intra class correlation) is used to measure how similar the outcome(flowrate in this case) is if they come from the same subject. This model adds a random effect for each subject which allows a different baseline outcome measurement for each subject(accounting for individual differences) and also a random effect for visit(accounting for time differences)
+
+
+
+
+```{r, echo =FALSE}
+#grouping age
+
+salivadata <- salivadata %>%
+  mutate(agecat1 = case_when(
+    age  <= 26 ~ 0,
+    age > 26 & age <= 33 ~ 1,
+    age > 33 ~ 2
+  ))
+salivadata <- salivadata %>% 
+  mutate(agecat2 = case_when(
+    agecat1 == 0 ~ "<=26",
+    agecat1 ==1 ~ ">26 & <=33",
+    agecat1 ==2 ~ ">33",
+    TRUE ~"m"
+  ))
+
+# grouping age according to <=26, >26 
+
+salivadata <- salivadata %>%
+  mutate(age1 = case_when(
+    age  <= 26 ~ 0,
+    age >26 ~ 1
+  ))
+salivadata <- salivadata %>% 
+  mutate(agecat3 = case_when(
+    age1 == 0 ~ "<=26",
+    age1 ==1 ~ ">26",
+    TRUE ~"m"
+  ))
+# grouping bmi according to suitable cut point <=25 and >=26
+
+salivadata <- salivadata %>%
+  mutate(bmi1 = case_when(
+    bmi  <=25 ~ 0,
+    bmi >=26 ~ 1
+  ))
+salivadata <- salivadata %>% 
+  mutate(bmicat1 = case_when(
+    bmi1 == 0 ~ "<=25",
+    bmi1 ==1 ~ ">=26",
+    TRUE ~"m"
+  ))
+```
+
+ Mixed Model for Flowrate
+ 
+BMI, age, gendeder were not statistically significant
+Mean flow rate for SS was higher compared to US and this was statistically significant.
+ICC of patno = 59% means that 59% of variation in flow rate was explained by differences in participants and only 1% explained by differences over the different visits. Repeated measurements for each subject was highly correlated. There was hardly any correlation(similarity of flowrate measurements) over visit. Residuals were normally distributed and Shapiro-Wilk test also confirmed that(p >0.05)
+
+
+```{r, echo= FALSE, message = FALSE }
+# Final flow Model
+flowmodel <- lmer(flowrate ~ treatment + (1|patno) +  (1|visit),
+                           data = salivadata, REML = FALSE)
+# extract parameters
+summ(flowmodel, confint = TRUE)
+
+``` 
+
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3}
+flowsubset <-
+  salivadata %>%
+  mutate(lm_predict = predict(flowmodel)) %>%
+ mutate(resid = (flowrate - lm_predict))
+ 
+ ggplot(data = flowsubset,
+       aes(x = resid)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot - flowrate") 
+```
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3} 
+qqnorm(flowsubset$resid) 
+qqline(flowsubset$resid)
+print(shapiro.test(flowsubset$resid))
+```
+
+ Mixed Model for Protein Concentration
+ 
+Bmi, age, gender were not statistically significant
+Residual were not mormaly distributed. Outliers were detected and deleted and model refitted and model didn't converge. Many consider using gammy distribution later
+
+
+```{r, echo= FALSE, message = FALSE }
+# Final flow Model
+proteinmodel <- lmer(protenconc ~ treatment + (1|patno) +  (1|visit),
+                    data = salivadata, REML = FALSE)
+# extract parameters
+summ(proteinmodel, confint = TRUE)
+
+``` 
+
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3}
+proten_residuals <-data.frame(residuals(proteinmodel))
+ 
+ggplot(data = proten_residuals,
+       aes(x = residuals.proteinmodel.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-protein")
+```
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3} 
+qqnorm(proten_residuals$residuals.proteinmodel.) 
+qqline(proten_residuals$residuals.proteinmodel.) 
+shapiro.test(proten_residuals$residuals.proteinmodel.) 
+```
+
+Model treatment
+
+```{r, include = FALSE}
+
+#extract the values of the potential outliers based on the IQR
+boxplot.stats(salivadata$protenconc)$out
+
+#extract the row number corresponding to these outliers:
+out <- boxplot.stats(salivadata$protenconc)$out
+out_ind <- which(salivadata$protenconc %in% c(out))
+out_ind
+salivadata[out_ind, ]
+# create new subset without the outliers and refit the model
+data_without_outlier  <-salivadata %>%
+  mutate(rowno = row_number()) %>%
+  filter(rowno != 56 & rowno != 105 & rowno != 109 & rowno != 111
+         & rowno != 113 & rowno != 139 & rowno != 191 & rowno != 194
+         & rowno != 195 & rowno != 201) # deleting outliers
+
+# refit the model on  data set without outliers for protemnconcen
+proteinM1 <- lmer(protenconc ~ treatment + (1|patno) +  (1|visit),
+                     data = data_without_outlier, REML = FALSE)
+
+proten_residualsM1 <-data.frame(residuals(proteinM1))
+# extract parameters
+summ(proteinM1, confint = TRUE)
+```
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3} 
+ggplot(data = proten_residualsM1,
+       aes(x = residuals.proteinM1.)) +
+  geom_density() +
+  labs(x = "residuals", y = "density",
+       title = "Residual plot-protein without outliers") 
+```
+
+```{r, echo= FALSE, message = FALSE, fig.width=4, fig.height=3} 
+qqnorm(proten_residualsM1$residuals.proteinM1.) 
+qqline(proten_residualsM1$residuals.proteinM1.) 
+shapiro.test(proten_residualsM1$residuals.proteinM1.)
+```
+
+

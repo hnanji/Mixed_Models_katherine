@@ -1,0 +1,703 @@
+# Text book: Introduction to R for BI
+
+# BI as a discipline is made up of several related activities, including data mining, online 
+# analytical processing, querying and reporting.”
+
+#  You can download this same Ch1_bike_sharing_data.csv file from the book's website at 
+# h ttp://jgendron.github.io/com.packtpub.intro.r.bi/.
+
+# DATA EXTRTACTION AND TRANFORMATION
+
+bikes <-read.csv("bikes.csv")
+# the structure fuinctions proivides you with a quick look a the data set
+# always use this function to examine the data set once imported
+str(bikes)
+
+# use read.table() when you have tab delimited date such as text data
+bike1 <- read.table("./data/bikes.csv", sep = ",", header = TRUE)
+
+# importing from a data base
+# data can also be contained in different data bases
+# Paul would like to access the data 
+# source ourDB using his
+# password R4BI:
+# In R, you do this using the RODBC package.
+#library(RODBC)
+connection <- odbcConnect(dsn = "ourDB", uid = "Paul", pwd = "R4BI")
+
+# after connecting you can use R to write a SQL query, 
+# pass this query to the sqlQuery() function,
+# and read the data into a bike data frame. 
+# You learned that there is a table in the database called marketing:
+query <- "SELECT * FROM marketing" 
+bike <- sqlQuery(connection, query) 
+close(connection) # close connection between R and the database to free memory
+# find out about the The log4r package which can be used to keep a log of the ETL process
+
+# Transforming data to fit analytic needs
+
+
+# 4 key activities with transformation
+#Filtering data rows
+#Selecting data columns
+#Adding a calculated column from existing data 
+#Aggregating data into groups
+
+# browseVignettes(package = "dplyr")
+
+# Filtering data rows
+
+# ? Comparison  # this gives a comparison of all logical operators
+
+library(dplyr)
+extracted_rows <- filter(bikes, registered == 0,
+                         season == 1 | season == 2)
+dim(extracted_rows)
+
+# %in% operator. This operator looks at each row (observation) and determines whether it is a member 
+#of the group based on criteria you specify
+# this is same as the selection above
+
+using_membership <- filter(bikes, registered == 0, season %in% c(1, 2))
+
+# the identical function checks if the two data sets are the same
+
+identical(extracted_rows, using_membership)
+
+# selecting columns
+
+extracted_columns <- select(extracted_rows, season, casual)
+
+# Aggregrating
+
+grouped <- group_by(bikes, workingday)
+
+#writing data to csv format
+# row.names = True prevents R from adding a column of numerical identifiers
+write.csv(grouped, "grouped_report.csv", row.names = FALSE) 
+# write table to tab seperated
+
+write.table(grouped, "revenue_report.txt", row.names = FALSE, sep = "\t")
+
+#=========================================================
+# DATA CLEANING
+
+#( The structured process called summarize-fix-convert-adapt
+# is used to turn raw data into datasets ready for analysis.)
+
+# Data cleaning is the process of transforming raw data into usable data. 
+#Cleaning data, checking quality, and 
+#standardizing data types accounts for the
+# majority of an analytic project schedule.
+
+# 4 key steps for data cleaning
+
+# Summarizing your data for inspection
+#Finding and fixing flawed data
+#Converting inputs to data types suitable for analysis
+# Adapting string variables to a standard
+
+bike <- read.csv("./data/bikes.csv", 
+                 stringsAsFactors = FALSE)
+
+# step 1: SUMMARIZING DATA FOR INSPECTION
+
+# summarize the data, inspect it to understand the data structure
+
+# use the str() function to summarize and inspect the data
+# this function is very powerful as it will give a summary of the data
+# data types, formats of the data types, e,g variables that were meant to be numeric, if  they were imported as characters will need conversion etc
+
+str(bike)  
+# if for example a numeric variable shows up as character, then there must be a 
+# problem causing it which needs fixing
+
+
+# Finding flaws in datasets
+
+# stringr package is very data cleaning, learin it
+# Introduction to stringr (Wickham, 2015) article
+
+# missing values
+table(is.na(bike))
+# deal with missing values- delete/impute/investigate missingness
+
+#detecting strings
+
+library(stringr)
+str_detect(bike, "NA") # this shows true for variables that has NA as strings
+# results show that the variabe sources has missing values
+
+table(is.na(bike$sources))
+
+# ERRONOUS VARIABLES
+
+# humidity is a numerical value, but the summary showed it stored as a character 
+# data type. You will now determine what is causing the problem in this column
+
+# The str_subset() function of stringr applies a regular
+#expression string to a column and extracts all matching 
+# instances into an object:
+
+bad_data <- str_subset(bike$humidity, "[a-z A-Z]")
+# results show an entry of x61 as bad data
+table(bike$humidity)
+# nature of the bad data suggest it is a typographical error, so it can be imputed
+
+# Passing the elements of bad_data into the str_detect() 
+# function will assign the row position of x61 to location:
+location <- str_detect(bike$humidity, bad_data)
+location
+# Other erroneous values can occur from encoding-the way text 
+#characters are stored in memory
+#  Encoding can turn a seemingly simple analysis into a 
+# challenge. Encoding may introduce hard-to-find erroneous values, such as unknown encoding or
+#misrepresented encoding, into the data (Levy, 2013).
+
+# Using subsetting [ , ] in R allows you to inspect just those observations 
+#that contain the erroneous value. 
+
+bike[location, ]
+
+# the above procedure has helped us to find flaw in the humidity variable at a particular position
+
+# FIXING FLAWS IN THE DATA
+# The stringr package also contains a str_replace_all() 
+# function to replace strings based on criteria you provide 
+# as input parameters to the function:
+
+bike$humidity <- str_replace_all(bike$humidity, bad_data, "61")
+
+# inspect of data has been fixed
+
+bike[location, ]
+
+# CONVERTING INPUT DATA TO FORMS NECESSARY FOR ANALYSIS
+# The R environment stores data in one of the several data type
+# numeric = 2.3
+# integer = 3
+# date = 
+# character = "ssss"
+# factor = "a","b"
+
+# Character to Numeric: The typographic error in the humidity data coerced it 
+# to a character type, but you need to convert it back to numeric.
+# Character to Factor: A common strategy for using read.csv() is to set stringsAsFactors = FALSE. 
+#This means categorical features are not automatically detected and you
+#will later choose which ones are factors.
+#Character to Date: A common situation is incorrect date conversion during file read. 
+# All your dates are characters. 
+#This is a difficult conversion, but it is detailed in the Date and time conversions section
+
+bike$humidity <- as.numeric(bike$humidity)
+
+# apply the factor() function to four variables
+# applying factors to categorical variables
+
+bike$holiday <- factor(bike$holiday, levels = c(0, 1), labels = c("no", "yes"))
+bike$workingday <- factor(bike$workingday, levels = c(0, 1), labels = c("no", "yes"))
+
+# applying factors to noninaal variables
+bike$season <- factor(bike$season, levels = c(1, 2, 3, 4), 
+                      labels = c("spring", "summer","fall", "winter"),
+                                 ordered= TRUE)
+                      
+bike$weather <- factor(bike$weather, levels = c(1, 2, 3, 4), 
+                       labels = c("clr_part_cloud","mist_cloudy","lt_rain_snow",
+                        "hvy_rain_snow"),
+                       ordered = TRUE)
+
+# DATE TIME CONVERSIONS
+# you must know the  nature of the  input data
+#R functions to view the form of the datetime variable
+# Functions in the lubridate package are named using letters 
+#representing the order of the input data
+str(bike)
+# input data set has date format as  {m/dd/yyyy hh:mm} so use the libridarte format as 
+#mdy_hm() function:
+library(lubridate)
+bike$datetime <- mdy_hm(bike$datetime)
+
+# ADAPTING STRING VARIABLES TO A STANDARD FORM
+
+# before converting a character variable to a factior which is the form R needs to summarise it, 
+# you must consider the following
+# sources is the character variable here.
+# How many unique kinds of advertising source are in sources? 
+# How many categories would you like to have in your analysis dataset?
+
+unique(bike$sources) # checking the unique values
+
+# the stringr package contains many functions for manipulating strings
+
+bike$sources <- tolower(bike$sources) 
+bike$sources <- str_trim(bike$sources) # trims excess white spaces 
+na_loc <- is.na(bike$sources) # this creates a logical vector which is True when NA is present
+bike$sources[na_loc] <- "unknown"
+
+# Rerunning the unique(bike$sources) reveals that the 14 unique types is now reduced to 11
+unique(bike$sources)
+
+# too many categories  presents complications in the analysis and consideration is given to reduce the categories
+# The DataCombine package is a user-friendly library of functions 
+#to combine data into newly defined categories. 
+#The following code accomplishes this adaption:
+library(DataCombine)
+# see text book for this explanation of code
+# this is just a clever way of collapsing  categories
+web_sites <- "(www.[a-z]*.[a-z]*)"
+current <- unique(str_subset(bike$sources, web_sites))
+replace <- rep("web", length(current))
+replacements <- data.frame(from = current, to = replace)
+# using the find and replace function
+bike <- FindReplace(data = bike, Var = "sources", replacements, from = "from", to = "to", exact = FALSE)
+unique(bike$sources)
+str(bike)
+
+# write final clean data into a file
+write.csv(bike,"clean_bike.csv", row.names = FALSE)
+
+# EXPLORATORY ANALYSIS
+
+# Exploratory data analysis means examining a 
+#dataset to discover its underlying characteristics
+#with an emphasis on visualization. 
+#It helps you during analysis design to determine if you should gather more data, 
+# suggest hypotheses to test, and identify models to develop. 
+#In this chapter, we will cover the following four topics related to exploratory data analysis:
+#Understanding exploratory data analysis 
+#Analyzing a single data variable
+# Analyzing two variables together
+#Exploring multiple variables simultaneously
+
+# manager wants to know more information from the data that will help drive 
+# some business decisions.
+# Although models are an important aspect of analytics, 
+#the process actually begins with a good question. 
+# You found that asking the right question is often the hardest part in solving a problem.
+# You will need to work with others who have expertise in the domain of
+# marketing and you will interact with them to help them form good questions
+
+# datas set from this book
+# http://jgendron.github.io/com.packtpub.intro.r.bi/
+  
+bkes <-read_csv("Ch3_marketing.csv")
+
+# EDA is a structured process where you discover information about the data characteristics and relationships 
+# among two or more variables.
+
+# developing questions is a practical way of reducing 
+#the exponential number of ways you can explore a dataset.
+#In particular, a sharp question or hypothesis can 
+#serve as a dimension reduction tool that can eliminate 
+# variables that are not immediately relevant to the question
+
+# you have a large amount of data, 
+# How do you know the data is appropriate for answering the questions?
+# the flow diagramj below shows the a generalized data science pipeline from beginning to end
+
+# QUESTION  ----> MODEL -----> ANSWER
+
+# A key goal in business intelligence is providing answers, 
+# through models, to the question.
+
+# UNDERSTANDING YOUR DATA IN EDA
+# A: SCATLE OF MEASUREMENT
+# type           permissible statistics
+# nominal        count(cases), mode, contigency correlation
+# ordinal        median, percentile
+# interval       mean, sd, rank correlation
+# ratio          coefficient of variation
+# ratio is a combination of two numbers expressed as rational number
+
+# R data types
+# numeric has decimal places e,g 2.0
+# integer has nio decinam place e.g 2,3,4
+# numeric can be converted to interger like so
+# data has different scales of measurments
+x <-2.01
+x
+x <- as.integer(x)
+x
+# character
+# logical
+# factor
+
+
+# Univariuate Analysis
+str(bkes)
+
+bkes$employees <-as.integer(bkes$employees)
+# giving ordered levels to pop_density
+bkes$pop_density <- factor(bkes$pop_density,
+                                ordered = TRUE,
+                                levels = c("Low", "Medium", "High"))
+
+# Focus on two variables, google_adwords (interval, numeric) and pop_density (ordinal, factor). You can 
+#learn their distributions using a tabular or graphical approach
+
+# Tabular Exploration
+
+summary(bkes$google_adwords) # normal if mean == median
+# you can use the five mumber statistics when using the median in case of skedweed data
+fivenum(bkes$google_adwords, na.rm=TRUE)
+
+# for categorical variables
+summary(bkes$pop_density)
+table(bkes$pop_density)
+
+# Graphical Exploration
+# Getting summary statistics is important, 
+# but seeing the shape of your data is illuminating
+data("anscombe")
+anscombe
+# the mean, sd, variance across all of these varioables are the same
+# the sapply function work across all variables in a df
+sapply(anscombe, mean)
+sapply(anscombe, sd)
+sapply(anscombe, var)
+
+# Visualize ordinal variables
+plot(bkes$pop_density)
+# visualize continuous variables
+boxplot(bkes$google_adwords, ylab = "Expenditures")
+hist(bkes$google_adwords, main = NULL)
+hist(bkes$google_adwords)
+# check whether the box plot is consistent with the 
+#  five-number summary you extracted earlier as is 
+#sometimes not the case( e.g the max and min values does not correspond to what is shown on graph)
+fivenum(bkes$google_adwords)
+summary(bkes$google_adwords)
+# if the mean == median, then data is normally distributed
+# if not, then it is skewed
+# exploring the twitter variables
+summary(bkes$twitter)
+boxplot(bkes$twitter, ylab = "Expenditures", col = "gray") 
+hist(bkes$twitter, main = NULL, col = "blue")
+# the graph show presence of outlier
+# left skewed data has left tail with the mean <median
+# right skewed has right tail with median >mean
+# the median never changes , but the mean changes and this is due to
+# the presence of outliers
+
+# ANALYSING TWO VARIABLES(BIVARIASTE ANALYSIS)
+# Try to answer the following questions when doing bivariate analysis
+# 1: What does the data look like?
+#2: Is there any relationship between two variables? 
+#3: Is there any correlation between the two?
+#4: Is the correlation significant?
+
+# Four words summarize these questions: 
+# Look-Relationships-Correlation-Significance. 
+# You will explore pairs of variables from the marketing dataset 
+# to investigate these questions using both tabular and graphical exploration methods.
+
+# 1: what does it look like
+summary(bkes)
+# adding a factor variable that divides the employee into two halves at the midpoint
+
+bkes$emp_factor <- cut(bkes$employees, 2)
+# the factor variable could me removed later on  like so 
+#bkes$emp_factor <- NULL
+
+# 2: Is there a relationship between  two variables
+
+table(bkes$emp_factor, bkes$pop_density)
+# There are three combinations of graphics 
+#when exploring bivariate variables:
+mosaicplot(table(bkes$pop_density,
+                 bkes$emp_factor), 
+           col = c("gray","black"), main = "Factor / Factor")
+# note aboive that you had ordered the factor variable previously when 
+# concverting it to a factor and this makes your 
+# graph more readable and ordered it from Low, medium, high
+boxplot(bkes$marketing_total ~ bkes$pop_density,
+        main = "Factor / Numeric")
+plot(bkes$google_adwords, bkes$revenues,
+     main = "Numeric / Numeric")
+
+
+# 3 is there any correlation between two variables?
+
+cor(bkes$google_adwords, bkes$revenues)
+cor(bkes$google_adwords, bkes$facebook)
+
+# 4: Is the correlation significant?
+cor.test(bkes$google_adwords, bkes$revenues)
+cor.test(bkes$google_adwords, bkes$facebook)
+# Any significant correlation between two variabes with tight CI is worth modeling
+# in the further analysis
+
+# EXPLORING MULTIPLE VARIABLES SIMULTANEOUSLY
+
+# the same approach still applies
+# Look-Relationships-Correlation-Significance.
+#1 Look
+summary(bkes)
+
+#2 Relationship
+pairs(bkes) # this gives you a pairwise comopafrison plot like wer did imndividually before
+
+# 3 Correlation 
+# here correlations is onkly found for numeric variables, so we subset the data set
+
+cor(bkes[ ,1:6])
+
+cor(bkes$google_adwords, bkes$revenues) # conforming what we had before
+
+# Significance
+# using the psychy package to find significant correlations
+
+library(psych)
+corr.test (bkes[ ,1:6])
+
+# You can also get insights about the entire dataset
+# with graphical exploration.
+#The corrgram package contains a corrgram()function,
+#which is an enhanced version of the pairs plot and 
+#also incorporates elements of the corr.test() function.
+# It uses a subset of the marketing dataset because the 
+#mathematics only allows numeric values. order is set 
+#to FALSE, retaining the position of the variables 
+#as found in the dataset:
+library(corrgram)
+corrgram(bkes[ ,1:6], order = FALSE,
+         main = "Correlogram of Marketing Data, 
+         Unordered", lower.panel = panel.conf, 
+         upper.panel = panel.ellipse,
+         diag.panel = panel.minmax, 
+         text.panel = panel.txt)
+
+# order is set to TRUE. This reorders the variables to present
+#the strongest correlations towards the top left,
+
+corrgram(bkes[ ,1:6], order = TRUE,
+         main = "Correlogram of Marketing Data, Ordered",
+         lower.panel = panel.shade,
+         upper.panel = panel.pie, 
+         diag.panel = panel.minmax, 
+         text.panel = panel.txt) 
+
+# Now that you have a sense of 
+# some possible influential features, 
+# you can take this knowledge and build better models 
+# to predict the outcomes
+
+
+# DATA MINING
+
+# Data mining is the process of working with a large 
+#amount of data to gather insights and detect patterns. 
+#Analysts often use it when the data does not include a response variable,
+#yet there is a belief that a relationship or information 
+#about the structure of the data lies within it.
+#This chapter will cover the following three introductory 
+#topics of data mining:
+# Explaining cluster analysis
+# Partitioning using k-means clustering 
+# Clustering using hierarchical techniques
+
+# clusters are collection of pioints from multidimentional data such that the 
+# minimises the diastance between esach cluster center point and its member
+
+# in unsupervised learning, we don n not have any response variable so we dont predict
+# we like at group of observations and look an ways to determine how the group together
+# based oin certain features
+# clusters forms based on similarities ob observations compared to their mean
+
+# Two types of clustering
+# partitioning- this splits the data set into a specified number of clusters based on their similarites(proximities)
+# clustering-splits or build clusters by pairs based on similarities
+
+# PARTITIONING USINGH KMEANS
+# task is to determine the number and location of kiosks
+# mananget neeed ton know where to place thne new kiosks asnd the reason
+# goal will be to place the kioks in areas where there is a high number of concentration
+#of  bike stations
+# the manager would also like to minimize the total distance between kiosks
+# and bike stations
+# too many kioks will be expensive to run
+# too few kioks will increase distance bikers have to travel
+# must find the right balance
+df <-read.csv("Ch5_bike_station_locations.csv")
+# data exploration
+summary(df)
+# changing margins to allow graph to fit
+par(mar=c(1,1,1,1))
+hist(df$latitude)
+hist(df$longitude)
+plot(df$latitude,df$longitude, asp=1) # asp=1 mantains an aspect ratio of 1:1 on the x and y axis
+
+# K_means
+# busness questioons drivesd us to look at to or three customers service kioks
+set.seed(123)
+two <-kmeans(df,2)
+three <-kmeans(df,3)
+# interpretiong the model]
+three
+
+# comparing the two cluster centers to the three cluster centers
+two$centers
+two$size
+three$centers
+three$size
+
+# creating a cluster assignment variable and attaching it to the df
+clus <-cbind(df, clus2=two$cluster, clus3 = three$cluster)
+
+# develiping a business case
+
+plot(clus$longitude, clus$latitude,asp=1,
+     pch=two$cluster, main="site for two kioks")
+points(two$centers[,2], two$centers[,1], pch=23,
+       col="maroon", bg="lightblue", cex=3)
+text(two$centers[,2], two$centers[,1], cex=1.1,
+       col="black", attributes(two$centers)$dimnames[[1]])
+
+
+plot(clus$longitude, clus$latitude,asp=1,
+     pch=three$cluster, main="site for three kioks")
+points(three$centers[,2], three$centers[,1], pch=23,
+       col="maroon", bg="lightblue", cex=3)
+text(three$centers[,2], three$centers[,1], cex=1.1,
+     col="black", attributes(three$centers)$dimnames[[1]])
+
+# To be continued
+
+
+# TIME SERIES ANALYSIS
+
+ df <-read_csv("Ch6_ridership_data_2011-2012.csv")
+ 
+ # Your task is to convert this data into a time 
+ #series aggregated by month, apply a time series model, and produce a monthly
+ #forecast for the coming year
+ 
+ # starting with the airpasss data in TSA package in R
+ 
+ library(TSA)
+ data(airpass)
+ str(airpass)
+ summary(airpass)
+ View(airpass)
+ 
+ # These are the responses that are dependent on previous points in time.
+ # This dependent data would fail the assumption of independence
+ # with time series, seasonal variations must be accounted for called seasonality
+ # with seasonality in mind, we need to decompose the trend,seasonality and random components
+ # use the decompose function  in forcaset package for this
+ 
+ library(forecast)
+ plot(decompose(airpass))# this is like a correlogram plot seen above during EDA
+ # This decomposition capability is nice as it gives you insights about approaches you may 
+ #want to take with the data
+ 
+ # Stationary assumption
+ # Stationary data exists when its mean and variance do not
+ # change as a function of time. 
+ #If you decompose a time series and witness a trend, 
+ #seasonal component, or both, then you have non-stationary data.
+ #You can transform them into stationary data in order to 
+ # meet the required assumption.
+ # You can transform non-stationary data into stationary 
+ # data using a technique called differencing.
+ 
+ # Differencing techniques
+ # Differencing subtracts each data point from the data point 
+ # that is immediately in front of it in the series. differenceing removes trends
+ 
+ # Seasonal differencing is similar, 
+ # but it subtracts each data point from its related data 
+ #point in the next cycle. 
+ # This is done with the diff() function, 
+ # along with a lag parameter set to the number of data points in a cycle
+# if there is  seasonality and or trend, then it breaks the stationary assumptions 
+ # amnd it must be differenced
+ 
+# ARIMA MODELS
+ # AR: Auto regressive, specified with p or P
+ # I: Integrated (differencing), specified with d or D
+ # MA: Moving average, specified with q or Q
+ 
+ # Auto regressive means that earlier lagged points in the data influence later points in the sequence.
+ # The type of AR model chosen is based on how many steps away (lags) 
+ # the points in the past affect the points in the future. 
+ #Data that has a greater lingering effect on future points has 
+ #a higher lag. The higher the lag, the higher the AR number. 
+ #You will see models referred to as AR(1), AR(2), and so
+ #forth to represent an autoregressive model of the number of p lags specified in the parentheses
+ 
+ # Integrated refers to differencing that you learned earlier.
+ #The d value represents the number of differences used in the model.
+ #It is typically zero or one.
+ 
+ # Models are referred to as ARIMA(p, d, q)(P, D, Q).
+ # The first group of numbers represents modeling of the non-seasonal components 
+ # the second group of numbers represents modeling of the seasonal components
+ 
+ # SELECTING A MODEL FOR FORCAST
+ 
+ # Correlation plots help you determine the type of model and number of lags to use. 
+ #There is an autocorrelation function (ACF) plot and a partial autocorrelation function (PACF) plot.
+ #These plots show the amount of correlation between various lags of a time series. 
+ #You can use this information to help determine model types and numbers of lags to use
+ 
+ # AR models will have an ACF that slowly diminishes or cycles, and its PACF will cut off under a significance line after a certain number of lags
+ # MA models will have a PACF that slowly diminishes or cycles, and its ACF will cut off under a significance line after a certain number of lags
+ 
+ 
+ # modelling steos workflow
+ 
+ # Convert your data into a time series data type, adapting your data as needed. 
+ # Inspect the time series with the decompose() function.
+ # If data is non-stationary, try differencing to see if it helps to make it stationary. 
+ #Determine the ARIMA model type and lags for the non-seasonal component.
+ #Model different options and determine the best fit based on diagnostics. 
+ #Determine the ARIMA model type and lags for the seasonal component.
+ #Model different options and determine the best fit based on diagnostics.
+ #Generate a forecast for the desired number of periods into the future.
+ 
+ # applying methods to the data set
+ 
+ head(df)
+ 
+ # accoirding to use case, needs to be aggregrated on a monthly bases and monthly forcast is needed
+ 
+ library(dplyr)
+ library(lubridate)
+ monthly_ride <- as.data.frame(df %>%
+                  group_by(year = year(datetime), 
+                  month = month(datetime)) %>% 
+                  summarise(riders = sum(count)))
+ 
+ # A quality check using 
+table(monthly_ride$year, monthly_ride$month)
+
+# convert data into am time series one
+
+# subset to get a single column from the data frame.
+# Then, you will create the time series using the ts() function:
+
+riders <- monthly_ride[ ,3]
+monthly <- ts(riders, frequency = 12, start = c(2011, 1))
+
+#The frequency parameter is set to 12 as you have twelve data points (months) in every period (one year).
+#The start parameter indicates that the first data point is the first month of 2011.
+
+monthly
+# step 2 decompose data
+plot(decompose(monthly))
+
+# step 3 differencing to recove seasonality
+plot(monthly)
+plot(diff(monthly)) 
+plot(diff(diff(y), lag = 6))# this plotd doesnt work, dont know why
+
+# step 4. generate ACF and PACF plots to get a sense of types and levels of models
+
+acf(monthly)
+
+pacf(monthly)
+
+# To be continued
+

@@ -1,0 +1,63 @@
+---
+title: 'Katherine: Correlation analysis'
+author: "Henry Nanji"
+date: "23/09/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(latexpdf)
+library(tidyverse)
+library(readr)
+library(caret)
+library(gtsummary)
+library(stringr)
+library(gplots)
+library(broom.mixed)
+library(mice)
+library(lme4)
+library(jtools)
+library(performance)
+library(sjPlot)
+library(Hmisc)
+#install.packages("correlations")
+library(correlation)
+
+
+# Importing data
+rawdatacorr1 <- read_csv("data/darta1.csv")
+```
+
+Spearman’s correlation assesses monotonic relationships (whether linear or not)
+For ordinal variables, the magnitude of the difference between levels is not necessarily known
+
+
+```{r, echo =FALSE}
+corr_results1 <- correlation::correlation(rawdatacorr1, include_factors = TRUE,
+                         method = "spearman", p_adjust = "bonferroni")
+    knitr::kable(
+    (corr_results1), caption = "Pairwise correlation")
+```  
+
+```{r, echo =FALSE}
+results1 <- corr_results1 %>%
+  filter(p <0.05)
+    knitr::kable(
+    (results1), caption = "Statistically significant Pairwise correlation ")
+```  
+
+
+
+
+
+
+

@@ -1,0 +1,24 @@
+install.packages("datarium")
+library(datarium)
+install.packages("rstatix")
+library(rstatix)
+
+install.packages("ggpubr")
+install.packages("broom")
+  
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+
+  # Wide format
+set.seed(123)
+data("anxiety", package = "datarium")
+anxiety %>% sample_n_by(group, size = 1)
+
+anxiety <- anxiety %>%
+  gather(key = "time", value = "score", t1, t2, t3) %>%
+  convert_as_factor(id, time)
+# Inspect some random rows of the data by groups
+set.seed(123)
+anxiety %>% sample_n_by(group, time, size = 1)
+

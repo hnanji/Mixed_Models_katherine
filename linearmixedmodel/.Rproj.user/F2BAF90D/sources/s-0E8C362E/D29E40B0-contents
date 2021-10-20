@@ -1,0 +1,127 @@
+
+
+# Dealing with missing values
+
+custdata <-read.csv(file = "/Users/uczhn/Documents/One_drive_system/R_tutorial/Data/custdata.tsv", header = TRUE,sep ='\t')
+# for variables with missing values, we need to check of the missing values are all from the same customers
+# checking location of missing values
+
+sum(is.na(custdata$housing.type))
+summary(custdata[is.na(custdata$housing.type), # restrict to rows where housing type is NA
+                 c('recent.move','num.vehicles','is.employed')]) # look only at this two columns
+
+sum(is.na(custdata$is.employed))
+
+# generally, the most obvious way is to create a new category for the missing variables
+
+custdata$is.employed.fix <-ifelse(is.na(custdata$is.employed),  # checks if is.employed is missing
+                                 'missing',  # assing  missing
+                                 ifelse(custdata$is.employed == T, # if true
+                                        'employed', # assign employed
+                                        'not employed')) # otherwise, not employed
+
+table(custdata$is.employed.fix)
+
+# as a data scientist, you may be interested in finding out why there are somany missing values
+ # the missing values could be encoded properly
+
+custdata$is.employed.fix <-ifelse(is.na(custdata$is.employed),  # checks if is.employed is missing
+                                  'not in active work',  # assing  missing
+                                  ifelse(custdata$is.employed == T, # if true
+                                         'employed', # assign employed
+                                         'not employed')) # otherwise, not employed
+
+# MISSING VALUES FOR NUMERICAL VARIABLES
+
+# if you suspect that the value is missing at randomn, say equipment was faulty
+# then it uis safe to replace the missing value with the expected(mean) value
+
+meanincome <-mean(custdata$income, na.rm = T)
+custdata$Income.fix <-ifelse(custdata$income == 0,meanincome,custdata$income)
+# assuming that the distribution of customers with missing  values are the same as those
+# without missing values, the above estimate and replacement is correct as it might have over estimated as well
+# as underestimated the value
+# if you also know from earlier exploration that this missing variable is related to
+# some other  variable, then you might used those variables to help predict missing values for
+# this variable, Inputing values for a preditor variables based on other predictors can also be done for missinmg values of a categoricak variable
+
+# imputting missing values using the mean assumnes that the value is missing at random
+
+# \in practise, there might be a chance that those with missing values for that partiucular variable might be
+#systematically different from those without. e,g thise with missing vakues for income might actuallu doont have any income and replacing it with  mean value for those withn income will be the wron decision
+
+# TREATING VALUES THAT ARE MISSING SYSTEMATICALLY
+# 1- group that data based on some cut points of the numerical variable(i.e converting to categorical)
+# then treat the missing values as with castegorical missing values above
+
+breaks <- c(0,10000, 50000,100000,250000,1000000)
+
+Income.group <-cut(custdata$income, breaks=breaks, include.lowest = T)
+
+# refere  to textboopk practical data science with R , page 68 to complete this
+
+# DATA TRANSFORMATION
+
+# to use a variable as a predictor, it is good to normalise the variable by the expected value(mean) to 
+# avoid too much variation in the variable
+# traformation depends on the modelling methods
+# for linear and logistic regression, enure the rtelationship between input and output variable is approximately linear
+ # and that the output variable has a constant variance(the variance of output is independent of the input)
+# some transformation of input variable is needed to better mneet these transformation
+
+#  CONVERTING CONTIUNUOUS VARIABLES TO DISCRTERE VARIABLES
+# in cases where there a sub population(bimodal distribution)
+' disctretizing the continbuois variablem is important in cases where a linear assumption, like regression is assumed'
+
+library(ggplot2)
+
+ggplot(data= custdata, mapping = aes(x =income, y = health.ins))+
+  geom_point() + geom_smooth(method = "lm")
+
+# discretizing income at 2000k
+custdata$income_2k <- custdata$income <2000
+summary(custdata$income_2k)
+
+# convering age in to cut point
+
+brks <-c(0,25,65,Inf)
+custdata$age.range <-cut(custdata$age, breaks= brks, include.lowest = T)
+
+# NORMALISOMNHG DATA
+
+# values could be normalised based on a typical value depending on the areas the person lives
+#  the interest could not be on absolute values, but how mucg greater or lower a value is relative to a typical value
+
+# we could nornmalise by mean age like so
+
+meanage <-mean(custdata$age)
+custdata$age.normalised <-custdata$age/meanage
+summary(custdata$age.normalised)
+# this means customers whose normalised age are much less than 1 are unsually young or much greater than one are 
+# unsaully old, but what constitutes much less and much greater, that will depend on how spread the age range in your data is
+# a typical age spread is summarised by the sd of the age variable
+# you can rescale youir data by using the sd as unit oif distance
+# person within 1 sd are within limit., but more than 2 sd are ontside the limit
+
+meanage <-mean(custdata$age)
+stdage<-sd(custdata$age)
+stdage
+
+custdata$age.normalisedbystd <- (custdata$age -meanage)/stdage
+
+# values less than -1 or greater than 1 signifies persons typically older or younger
+# hence normalising by mean age and std is very useful when distribution is roughly symmetric
+
+# use log transformation for skewed and wide distribution
+
+
+
+
+
+
+
+
+
+
+
+
